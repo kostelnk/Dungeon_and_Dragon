@@ -1,31 +1,52 @@
 """
-ASCII renderer for dungeon maps.
+ASCII renderer for dungeon maps and HUD.
 """
+
+import os
 
 class Renderer:
     """
-    Renders the dungeon map along with hero and enemy positions.
+    Handles drawing the game state to the console.
     """
 
-    def render(self, dungeon, hero, beholder=None):
+    def render(self, dungeon, hero, beholder=None, message=""):
         """
-        Print dungeon map with entities drawn on top.
+        Clears screen and prints map + status.
         """
+        # Clear console (cross-platform)
+        os.system('cls' if os.name == 'nt' else 'clear')
+
         w, h = dungeon.size
 
-        # Create a copy of the map to draw into
+        # Create display buffer
         display = [row[:] for row in dungeon.dungeon_map]
 
-        # Draw hero
-        display[hero.y][hero.x] = "@"
+        # Draw Items
+        for (ix, iy), item in dungeon.items.items():
+            symbol = "?"
+            if item.type == "weapon": symbol = "/"
+            elif item.type == "shield": symbol = "O"
+            elif item.type == "potion": symbol = "!"
+            display[iy][ix] = f"\033[93m{symbol}\033[0m" # Yellow
 
-        # Draw Beholder if present
-        if beholder:
-            display[beholder.y][beholder.x] = "B"
+        # Draw Hero
+        display[hero.y][hero.x] = f"\033[92m@\033[0m" # Green
 
-        # Print the map
+        # Draw Beholder
+        if beholder and beholder.hp > 0:
+            display[beholder.y][beholder.x] = beholder.symbol
+
+        # Print Map
+        print(f"--- FLOOR {dungeon.level} ---")
         for row in display:
             print("".join(row))
 
-        # Print HUD
-        print(f"\nHP: {hero.hp}   Gold: {hero.gold}")
+        # HUD
+        print("-" * 40)
+        print(f"HP: {hero.hp} | Stm: {getattr(hero, 'stamina', 50)} | Gold: {hero.gold} | Lvl: {dungeon.level}")
+        print(f"Stats: ATK {hero.attack} (Base {hero.base_attack}) | DEF {hero.defense}")
+        print("-" * 40)
+
+        # Message Log
+        if message:
+            print(f"> {message}")
