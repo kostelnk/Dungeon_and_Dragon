@@ -1,0 +1,19 @@
+kostelnk_dungeon_game/
+│
+├─ core/
+│   ├─ __init__.py
+│   ├─ dungeon.py
+│   ├─ hero.py
+│   ├─ beholder.py
+│   └─ utils.py
+│
+├─ io/
+│   ├─ __init__.py
+│   ├─ renderer.py
+│   └─ save_load.py
+│
+├─ game/
+│   ├─ __init__.py
+│   └─ loop.py
+│
+└─ main.py
