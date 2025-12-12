@@ -27,20 +27,6 @@ from kostelnk_dungeon_game.game_io.save_load import load_game
 RED = "\033[91m"
 RESET = "\033[0m"
 
-
-def print_logo():
-    """Prints the ASCII game logo."""
-    logo = r"""
- ____  _   _ _   _  ____  ____  ____  _   _
-|  _ \| | | | \ | |/ ___|/ __||/ ___|| \ | |
-| | | | | | |  \| | |  _| |_ _ \___ \|  \| |
-| |_| | |_| | |\  | |_| | |___  ___) | |\  |
-|____/ \___/|_| \_|\____|\____||____/|_| \_|
-    """
-    print(f"{RED}{logo}{RESET}")
-    print("       (Created in Python)\n")
-
-
 def initialize_new_game(map_size, level):
     """
     Helper function to generate a fresh Dungeon, Hero, and Beholder.
@@ -65,9 +51,6 @@ def main():
     """
     Main execution function. Initializes the game and starts the loop.
     """
-    # 0. Show Logo
-    print_logo()
-
     # 1. Show Menu
     menu = MainMenu()
     action = menu.run()
@@ -123,3 +106,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
