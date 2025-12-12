@@ -9,14 +9,19 @@ class Renderer:
     Handles drawing the game state to the console.
     """
 
+    @staticmethod
+    def clear_screen():
+        """
+        Clears the terminal screen (Windows/Linux/Mac compatible).
+        """
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     def render(self, dungeon, hero, beholder=None, message=""):
         """
         Clears screen and prints map + status.
         """
-        # Clear console (cross-platform)
-        os.system('cls' if os.name == 'nt' else 'clear')
+        self.clear_screen()
 
-        w, h = dungeon.size
 
         # Create display buffer
         display = [row[:] for row in dungeon.dungeon_map]
@@ -36,10 +41,11 @@ class Renderer:
             elif item.type == "potion":
                 symbol = "!"
 
-            # Vykreslení se správnou barvou
+            # Rendering with the correct color
             display[iy][ix] = f"{color}{symbol}\033[0m"
+
         # Draw Hero
-        display[hero.y][hero.x] = f"\033[92m@\033[0m" # Green
+        display[hero.y][hero.x] = "\033[92m@\033[0m"  # Green
 
         # Draw Beholder
         if beholder and beholder.hp > 0:
@@ -52,9 +58,11 @@ class Renderer:
 
         # HUD
         print("-" * 50)
-        print(f"HP: {hero.hp} | Stm: {getattr(hero, 'stamina', 50)} | Gold: {hero.gold}")
+        # Getattr for safety, if the attributes did not exist
+        hero_stamina = getattr(hero, 'stamina', 50)
+        print(f"HP: {hero.hp} | Stm: {hero_stamina} | Gold: {hero.gold}")
         print(f"Stats: ATK {hero.attack} | DEF {hero.defense}")
-        print(f"Leave game press: Q")
+        print("Leave game press: Q")
         print("-" * 50)
 
         # Message Log

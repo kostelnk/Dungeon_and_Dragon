@@ -4,6 +4,7 @@ Enhanced Hero entity module.
 
 from kostelnk_dungeon_game.dungeon_core.finds import Item
 
+
 class Hero:
     """
     Represents the player-controlled hero.
@@ -27,10 +28,12 @@ class Hero:
 
     @property
     def attack(self) -> int:
+        """Calculates total attack power including equipped items."""
         return self.base_attack + sum(i.attack_bonus for i in self.inventory if i.equipped)
 
     @property
     def defense(self) -> int:
+        """Calculates total defense including equipped items."""
         return self.base_defense + sum(i.defense_bonus for i in self.inventory if i.equipped)
 
     @property
@@ -75,7 +78,6 @@ class Hero:
             if item.name.lower() == item_name.lower():
                 # A) Potion -> Use (Consume)
                 if item.type == "potion":
-                    # --- NOVÁ MECHANIKA: Cena za použití lektvaru ---
                     cost = item.weight
                     if self.stamina < cost:
                         return f"Too exhausted to use {item.name}! (Needs {cost} Stamina)"
@@ -89,10 +91,10 @@ class Hero:
                     return f"Could not use {item.name}."
 
                 # B) Equipment -> Toggle Equip
-                else:
-                    item.equipped = not item.equipped
-                    status = "equipped" if item.equipped else "unequipped"
-                    return f"You {status} {item.name}."
+                # FIX R1705: Unnecessary "else" removed because "if" block returns
+                item.equipped = not item.equipped
+                status = "equipped" if item.equipped else "unequipped"
+                return f"You {status} {item.name}."
 
         return "Item not found in inventory."
 
@@ -105,7 +107,7 @@ class Hero:
         move_cost = 1 + self.current_load
 
         if self.stamina < move_cost:
-                        return False
+            return False
 
         new_x = self.x + dx
         new_y = self.y + dy

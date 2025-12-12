@@ -1,3 +1,7 @@
+"""
+Main menu module handling UI and user choices.
+"""
+
 import os
 import sys
 
@@ -8,8 +12,7 @@ class MainMenu:
     """
 
     def __init__(self):
-        self.title = r"""                                              
-
+        self.title = r"""
  ████▒  █    █ ██   █  ▒███▒ ██████  ▓██▓  ██   █
  █  ▒█░ █    █ ██░  █ ░█▒ ░█ █      ▒█  █▒ ██░  █
  █   ▒█ █    █ █▒▓  █ █▒     █      █░  ░█ █▒▓  █
@@ -21,7 +24,8 @@ class MainMenu:
  ████▒   ████  █   ██  ▒███▒ ██████  ▓██▓  █   ██
 """
 
-    def clear_screen(self):
+    @staticmethod
+    def clear_screen():
         """Clears the terminal screen (Windows/Linux/Mac compatible)."""
         os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -44,7 +48,8 @@ class MainMenu:
         print("Retrieve it to win the game!")
 
         print("\n[ ITEMS ]")
-        print("⚔️  Weapons: Increase your attack. The better the sword, the faster you kill monsters.")
+        print("⚔️  Weapons: Increase your attack. "
+              "The better the sword, the faster you kill monsters.")
         print("🛡️  Shields: Increase defense. Reduce the damage you take.")
         print("🧪  Potions: Restores your health (HP) or energy.")
         print("💰  Gold:    Increases your score.")
@@ -100,9 +105,9 @@ class MainMenu:
 
             if choice == '1':
                 return 'new'
-            elif choice == '2':
+            if choice == '2':
                 return 'load'
-            elif choice == '3':
+            if choice == '3':
                 self.show_mechanics()
             elif choice == '4':
                 self.show_controls()

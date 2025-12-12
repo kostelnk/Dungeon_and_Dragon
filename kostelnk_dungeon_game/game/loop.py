@@ -1,5 +1,9 @@
+"""
+Main game loop module.
+Handles input, rendering, and core game logic flow.
+"""
+
 import sys
-import random
 from kostelnk_dungeon_game.game_io.save_load import save_game, load_game
 from kostelnk_dungeon_game.dungeon_core.dungeon import Dungeon
 from kostelnk_dungeon_game.dungeon_core.beholder import Beholder
@@ -13,263 +17,256 @@ GREEN = "\033[92m"
 RESET = "\033[0m"
 
 
-def respawn_beholder(dungeon, beholder, start_x, start_y):
+class GameSession:
     """
-    Helper function to safely spawn the Beholder far from the start position.
-
-    Args:
-        dungeon: The current Dungeon instance.
-        beholder: The Beholder instance.
-        start_x: Player's X coordinate (to avoid).
-        start_y: Player's Y coordinate (to avoid).
+    Encapsulates the game state and main loop logic to reduce complexity.
     """
-    possible_targets = []
+    def __init__(self, dungeon, hero, beholder, renderer):
+        self.dungeon = dungeon
+        self.hero = hero
+        self.beholder = beholder
+        self.renderer = renderer
+        self.message = "Welcome! Press WASD to move, R to Rest, G to Regen map."
+        self.floors_history = {}
+        self.moves_on_floor = 0
+        self.action_taken = False
 
-    # Look for valid floor tiles far from the player
-    for (tx, ty) in dungeon.floor_tiles:
-        dist_x = abs(tx - start_x)
-        dist_y = abs(ty - start_y)
+    def handle_save_quit(self):
+        """Handles saving and quitting the game."""
+        confirm = input("Save before quit? (Y/N): ").lower().strip()
+        if confirm == 'y':
+            save_game(self.hero, self.beholder, self.dungeon)
+            print("Game saved successfully.")
+        print("Goodbye!")
+        sys.exit()
 
-        if dist_x >= 5 or dist_y >= 5:
-            possible_targets.append((tx, ty))
+    def handle_regenerate(self):
+        """Handles map regeneration command 'G'."""
+        if not (self.hero.x == 1 and self.hero.y == 1):
+            self.message = (f"{RED}You can only regenerate from "
+                            f"the starting position!{RESET}")
+            return
 
-    if possible_targets:
-        bx, by = random.choice(possible_targets)
-        beholder.x = bx
-        beholder.y = by
-    else:
-        # Fallback for extremely small maps
-        beholder.x = 3
-        beholder.y = 3
+        if self.moves_on_floor > 0:
+            self.message = (f"{RED}The flux is unstable! "
+                            f"You cannot regenerate after exploring.{RESET}")
+            return
 
+        self.dungeon.create_dungeon()
+        self.beholder.spawn_at_safe_location(
+            self.dungeon.floor_tiles, self.hero.x, self.hero.y
+        )
+        self.message = (f"{GREEN}Flux energy rewrites the reality! "
+                        f"Map regenerated.{RESET}")
 
-def game_loop(dungeon, hero, beholder, renderer):
-    """
-    Main game loop handling input, rendering, and game logic.
+    def handle_stairs(self):
+        """Handles logic when player steps on stairs (>)."""
+        # Save current floor state
+        self.floors_history[self.dungeon.level] = (self.dungeon, self.beholder)
 
-    Args:
-        dungeon: The Dungeon object.
-        hero: The Hero object.
-        beholder: The Beholder object.
-        renderer: The Renderer object.
-    """
-    message = "Welcome! Press WASD to move, R to Rest, G to Regen map."
+        # Auto-save progress
+        save_game(self.hero, self.beholder, self.dungeon)
+        print(f"{GREEN}Progress saved.{RESET}")
 
-    # Stores visited floors to allow returning without regeneration
-    floors_history = {}
+        next_level = self.dungeon.level + 1
 
-    # Counter for actions taken on the current floor (prevents map regeneration abuse)
-    moves_on_floor = 0
+        if next_level in self.floors_history:
+            # Load existing floor
+            self.dungeon, self.beholder = self.floors_history[next_level]
+            self.hero.x, self.hero.y = 1, 1
+            self.message = f"Returned to floor {next_level}."
+        else:
+            # Generate new floor
+            self.dungeon = Dungeon(self.dungeon.size, level=next_level)
+            self.dungeon.create_dungeon()
 
-    while True:
-        # 1. Render the game state
-        renderer.render(dungeon, hero, beholder, message)
-        message = ""
+            # Create new Beholder
+            self.beholder = Beholder(0, 0, level=next_level)
+            self.hero.x, self.hero.y = 1, 1
+            self.beholder.spawn_at_safe_location(
+                self.dungeon.floor_tiles, self.hero.x, self.hero.y
+            )
+            self.message = f"Descended to floor {next_level}."
 
-        # 2. Get Input
-        cmd_raw = input("Action: ").lower().split()
-        if not cmd_raw: continue
-        cmd = cmd_raw[0]
+        self.moves_on_floor = 0
 
-        dx, dy = 0, 0
-        action_taken = False
+    def handle_combat(self, damage):
+        """Handles combat interaction with the Beholder."""
+        # Apply damage with immunity check
+        real_damage = self.beholder.take_damage(
+            damage,
+            getattr(self.hero, 'weapon', None),
+            getattr(self.hero, 'shield', None)
+        )
 
-        # --- COMMAND PROCESSING ---
+        if real_damage > 0:
+            self.message = f"You hit Beholder for {real_damage} dmg!"
+        else:
+            self.message = (f"{RED}Your attack bounced off! "
+                            f"(You need a weapon/shield!){RESET}")
 
+        if self.beholder.hp <= 0:
+            self.message += f" {RED} YOU KILLED THE BEHOLDER! {RESET}"
+
+        self.hero.stamina = max(0, self.hero.stamina - 2)
+        self.action_taken = True
+
+    def handle_item_pickup(self):
+        """Handles picking up items from the ground."""
+        item = self.dungeon.get_item_at(self.hero.x, self.hero.y)
+        if item:
+            if isinstance(item, Gold):
+                self.hero.gold += item.amount
+                self.message = f"{YELLOW}You found {item.amount} Gold!{RESET}"
+            else:
+                success = self.hero.add_item(item)
+                if success:
+                    self.message = f"{CYAN}Picked up {item.name}!{RESET}"
+                else:
+                    self.dungeon.items[(self.hero.x, self.hero.y)] = item
+                    self.message = f"{RED}Inventory full!{RESET}"
+
+    def handle_movement(self, dx, dy):
+        """Handles player movement, combat, and environment interaction."""
+        target_x = self.hero.x + dx
+        target_y = self.hero.y + dy
+
+        # Combat Logic
+        if (self.beholder.hp > 0 and
+                (target_x, target_y) == (self.beholder.x, self.beholder.y)):
+            damage = getattr(self.hero, 'attack_power', 5)
+            self.handle_combat(damage)
+            return
+
+        # Movement Logic
+        moved = self.hero.move(dx, dy, self.dungeon)
+        if moved:
+            self.action_taken = True
+            self.handle_item_pickup()
+
+            # Stairs Logic
+            if self.dungeon.dungeon_map[self.hero.y][self.hero.x] == ">":
+                self.handle_stairs()
+
+    def process_command(self, cmd, cmd_raw):
+        """
+        Processes the parsed user command.
+        Returns False if the game loop should continue, True otherwise.
+        """
         if cmd == 'q':
-            # Save and Quit
-            confirm = input("Save before quit? (Y/N): ").lower().strip()
-            if confirm == 'y':
-                save_game(hero, beholder, dungeon)
-                print("Game saved successfully.")
-            print("Goodbye!")
-            sys.exit()
-
+            self.handle_save_quit()
         elif cmd == 'save':
-            save_game(hero, beholder, dungeon)
-            message = "Game saved manually."
-            continue
-
+            save_game(self.hero, self.beholder, self.dungeon)
+            self.message = "Game saved manually."
         elif cmd == 'load':
-            load_game(hero, beholder, dungeon)
-            floors_history = {}  # Reset history on load (simple implementation)
-            moves_on_floor = 0  # Reset move counter
-            message = "Game loaded."
-            continue
-
+            load_game(self.hero, self.beholder, self.dungeon)
+            self.floors_history = {}
+            self.moves_on_floor = 0
+            self.message = "Game loaded."
         elif cmd == 'r':
-            # Rest action
-            hero.rest()
-            message = "You took a rest to recover stamina."
-            action_taken = True
-
+            self.hero.rest()
+            self.message = "You took a rest to recover stamina."
+            self.action_taken = True
         elif cmd == 'g':
-            # Regenerate Map Action
-            # Condition 1: Must be at start position
-            if not (hero.x == 1 and hero.y == 1):
-                message = f"{RED}You can only regenerate from the starting position!{RESET}"
-                continue
-
-            # Condition 2: Must not have made any moves on this floor
-            if moves_on_floor > 0:
-                message = f"{RED}The flux is unstable! You cannot regenerate after exploring.{RESET}"
-                continue
-
-            # Execute Regeneration
-            dungeon.create_dungeon()
-            respawn_beholder(dungeon, beholder, hero.x, hero.y)
-            message = f"{GREEN}Flux energy rewrites the reality! Map regenerated.{RESET}"
-            continue
-
+            self.handle_regenerate()
         elif cmd == 'i':
-            # Show Inventory
             print("\n=== INVENTORY ===")
-            print(f"Load: {hero.current_load} / Stamina: {hero.stamina}")
-            print(f"Gold: {hero.gold}")
-            print(f"Items: {len(hero.inventory)}/3")
-            for item in hero.inventory:
+            print(f"Load: {self.hero.current_load} / Stamina: {self.hero.stamina}")
+            print(f"Gold: {self.hero.gold}")
+            print(f"Items: {len(self.hero.inventory)}/3")
+            for item in self.hero.inventory:
                 status = "[E]" if item.equipped else "   "
                 print(f"{status} {item.name} (Wt: {item.weight})")
             input("Press Enter...")
-            continue
-
         elif cmd == 'e':
-            # Equip / Use Item
             if len(cmd_raw) < 2:
-                message = "Usage: e <item_name>"
+                self.message = "Usage: e <item_name>"
             else:
                 target_name = " ".join(cmd_raw[1:])
-                message = hero.use_or_equip(target_name)
-                # Using an item counts as an action (prevents regen after buffing)
-                action_taken = True
-            continue
-
+                self.message = self.hero.use_or_equip(target_name)
+                self.action_taken = True
         elif cmd == 'x':
-            # Drop Item
             if len(cmd_raw) < 2:
-                message = "Usage: x <item_name>"
+                self.message = "Usage: x <item_name>"
             else:
                 target_name = " ".join(cmd_raw[1:])
-                dropped_item = hero.drop_item(target_name)
-
-                if dropped_item:
-                    dungeon.items[(hero.x, hero.y)] = dropped_item
-                    message = f"You dropped {dropped_item.name}."
-                    action_taken = True
+                dropped_item = self.hero.drop_item(target_name)
+                if not dropped_item:
+                    self.message = "Item not found in inventory."
                 else:
-                    message = "Item not found in inventory."
-            continue
-
+                    self.dungeon.items[(self.hero.x, self.hero.y)] = dropped_item
+                    self.message = f"You dropped {dropped_item.name}."
         elif cmd in ['w', 'a', 's', 'd']:
-            # Movement preparation
-            current_cost = 1 + hero.current_load
-            if hero.stamina < current_cost:
-                message = f"{RED}Too heavy/tired! Cost: {current_cost}, Stamina: {hero.stamina}. (Press 'R'){RESET}"
-                continue
-
-            if cmd == 'w':
-                dy = -1
-            elif cmd == 's':
-                dy = 1
-            elif cmd == 'a':
-                dx = -1
-            elif cmd == 'd':
-                dx = 1
-
-            target_x = hero.x + dx
-            target_y = hero.y + dy
-
-            # --- COMBAT LOGIC ---
-            if beholder.hp > 0 and (target_x, target_y) == (beholder.x, beholder.y):
-                # Retrieve attack power safely
-                damage = getattr(hero, 'attack_power', 5)
-                # Apply damage with potential Level 3 immunity check
-                real_damage = beholder.take_damage(damage, getattr(hero, 'weapon', None), getattr(hero, 'shield', None))
-
-                if real_damage > 0:
-                    message = f"You hit Beholder for {real_damage} dmg!"
-                else:
-                    message = f"{RED}Your attack bounced off! (You need a weapon/shield!){RESET}"
-
-                if beholder.hp <= 0:
-                    message += f" {RED} YOU KILLED THE BEHOLDER! {RESET}"
-
-                hero.stamina = max(0, hero.stamina - 2)
-                action_taken = True
-
-            # --- MOVEMENT LOGIC ---
+            current_cost = 1 + self.hero.current_load
+            if self.hero.stamina < current_cost:
+                self.message = (f"{RED}Too heavy/tired! Cost: {current_cost}, "
+                                f"Stamina: {self.hero.stamina}. (Press 'R'){RESET}")
             else:
-                moved = hero.move(dx, dy, dungeon)
-                if moved:
-                    action_taken = True
-
-                    # 1. Item Pickup
-                    item = dungeon.get_item_at(hero.x, hero.y)
-                    if item:
-                        if isinstance(item, Gold):
-                            hero.gold += item.amount
-                            message = f"{YELLOW}You found {item.amount} Gold!{RESET}"
-                        else:
-                            success = hero.add_item(item)
-                            if success:
-                                message = f"{CYAN}Picked up {item.name}!{RESET}"
-                            else:
-                                dungeon.items[(hero.x, hero.y)] = item
-                                message = f"{RED}Inventory full!{RESET}"
-
-                    # 2. Stairs Logic (Level Transition)
-                    if dungeon.dungeon_map[hero.y][hero.x] == ">":
-                        # Save current floor state to history
-                        floors_history[dungeon.level] = (dungeon, beholder)
-
-                        # Auto-save progress
-                        save_game(hero, beholder, dungeon)
-                        print(f"{GREEN}Progress saved.{RESET}")
-
-                        next_level = dungeon.level + 1
-
-                        # Check if next level exists in history
-                        if next_level in floors_history:
-                            # Load existing floor
-                            dungeon, beholder = floors_history[next_level]
-                            hero.x, hero.y = 1, 1
-                            message = f"Returned to floor {next_level}."
-                        else:
-                            # Generate new floor
-                            dungeon = Dungeon(dungeon.size, level=next_level)
-                            dungeon.create_dungeon()
-                            beholder = Beholder(10, 10, level=next_level)
-                            hero.x, hero.y = 1, 1
-                            respawn_beholder(dungeon, beholder, hero.x, hero.y)
-                            message = f"Descended to floor {next_level}."
-
-                        # Reset floor move counter (allows 'G' only if needed immediately)
-                        moves_on_floor = 0
-                        continue
-
+                dx, dy = 0, 0
+                if cmd == 'w':
+                    dy = -1
+                elif cmd == 's':
+                    dy = 1
+                elif cmd == 'a':
+                    dx = -1
+                elif cmd == 'd':
+                    dx = 1
+                self.handle_movement(dx, dy)
         else:
-            message = "Unknown command."
-            continue
+            self.message = "Unknown command."
 
-        # Check for exhaustion (drop items if too heavy)
-        if hero.stamina < hero.current_load:
+    def check_exhaustion(self):
+        """Checks if hero is overburdened and drops items if necessary."""
+        if self.hero.stamina < self.hero.current_load:
             dropped_msg = []
-            for item in hero.inventory[:]:
+            for item in self.hero.inventory[:]:
                 if item.equipped:
                     item.equipped = False
-                    hero.inventory.remove(item)
-                    dungeon.items[(hero.x, hero.y)] = item
+                    self.hero.inventory.remove(item)
+                    self.dungeon.items[(self.hero.x, self.hero.y)] = item
                     dropped_msg.append(item.name)
 
             if dropped_msg:
                 names = ", ".join(dropped_msg)
-                message += f" {RED}Collapsed from weight! Dropped: {names}!{RESET}"
+                self.message += (f" {RED}Collapsed from weight! "
+                                 f"Dropped: {names}!{RESET}")
 
-        # --- ENEMY TURN ---
-        if action_taken and beholder.hp > 0:
-            moves_on_floor += 1  # Increment counter to disable map regen
-            beholder.update(hero, dungeon.dungeon_map)
+    def enemy_turn(self):
+        """Executes the enemy AI turn."""
+        if self.action_taken and self.beholder.hp > 0:
+            self.moves_on_floor += 1
+            self.beholder.update(self.hero, self.dungeon.dungeon_map)
 
-            if hero.hp <= 0:
-                renderer.render(dungeon, hero, beholder, f"{RED}YOU DIED!{RESET}")
+            if self.hero.hp <= 0:
+                self.renderer.render(
+                    self.dungeon, self.hero, self.beholder, f"{RED}YOU DIED!{RESET}"
+                )
+                return True  # Game Over
+        return False
+
+    def run(self):
+        """Runs the main loop."""
+        while True:
+            self.renderer.render(
+                self.dungeon, self.hero, self.beholder, self.message
+            )
+            self.message = ""
+            self.action_taken = False
+
+            cmd_raw = input("Action: ").lower().split()
+            if not cmd_raw:
+                continue
+
+            self.process_command(cmd_raw[0], cmd_raw)
+            self.check_exhaustion()
+            if self.enemy_turn():
                 break
+
+
+def game_loop(dungeon, hero, beholder, renderer):
+    """
+    Entry point for the game loop.
+    Creates a GameSession and runs it.
+    """
+    session = GameSession(dungeon, hero, beholder, renderer)
+    session.run()
