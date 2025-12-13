@@ -1,14 +1,14 @@
 # Dungeon & Dragon
 
 **Dungeon & Dragon** is a Python-based roguelike dungeon crawler played in the terminal. 
-Explore procedurally generated maps, fight smart enemies, manage your stamina and inventory, and descend to the 7th floor to find the legendary artifact!
+Explore procedurally generated maps, fight smart enemies, manage your stamina and inventory, and collect as much gold as possible on your way down.
 
 ## 🎮 Features
 
 * **Procedural Generation:** Every floor is unique, created using random noise algorithms with connectivity checks (Flood Fill) to ensure no dead ends.
 * **Smart Enemy AI:** The "Beholder" tracks you using pathfinding algorithms (BFS), navigating around walls to chase you, and keeps a safe distance when spawning.
 * **RPG Mechanics:**
-    * **Stamina System:** Movement and actions cost stamina. Carry too much weight, and you'll tire faster.
+    * **Stamina System:** Movement and actions cost stamina. Carrying too much weight will cause you to tire faster.
     * **Inventory:** Manage weapons, shields, and potions. Drop items to reduce weight.
     * **Combat:** Turn-based combat where stats (Attack/Defense) matter.
 * **Save/Load System:** Full persistence using JSON. Save your progress and resume later.
